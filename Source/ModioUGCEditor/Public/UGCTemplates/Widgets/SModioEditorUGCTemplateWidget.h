@@ -1,10 +1,23 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+/*
+ *  Copyright (C) 2024-2026 mod.io Pty Ltd. <https://mod.io>
+ *
+ *  This file is part of the mod.io UE Plugin.
+ *
+ *  Distributed under the MIT License. (See accompanying file LICENSE or
+ *   view online at <https://github.com/modio/modio-ue/blob/main/LICENSE>)
+ *
+ */
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Widgets/SCompoundWidget.h"
+#include "Interfaces/IPluginManager.h"
 #include "../UGCTemplateSubsystem.h"
+#include "../UGCTemplateDescriptor.h"
+#include "SUGCTemplateCategoryTile.h"
+#include "../UGCTemplateSettings.h"
+#include "../../Slate/Public/Widgets/Views/STileView.h"
 
 class FModioEditorUGCTemplateWidgetCommands : public TCommands<FModioEditorUGCTemplateWidgetCommands>
 {
@@ -27,7 +40,10 @@ public:
 	virtual ~SModioEditorUGCTemplateWidget() override;
 
 	SLATE_BEGIN_ARGS(SModioEditorUGCTemplateWidget)
-	{}
+	{
+	}
+	SLATE_ARGUMENT(EUGCTemplateType, Mode)
+	SLATE_ARGUMENT(TSharedPtr<IPlugin>, Context)
 	SLATE_END_ARGS()
 
 	/** Constructs this widget with InArgs */
@@ -43,20 +59,13 @@ private:
 
 private:
 	TSharedPtr<STextBlock> HeaderText;
-	TSharedPtr<class SWidgetSwitcher> TemplateTypeSwitcher;
 	TSharedPtr<class SComboBox<TSharedPtr<FUGCPluginInfo>>> ModTemplateModSelectionBox;
-	TSharedPtr<class SComboBox<TSharedPtr<FUGCTemplateInfo>>> ItemTemplateModSelectionBox;
 
-	TSharedPtr<class SComboBox<TSharedPtr<FUGCTemplateInfo>>> CreateModTemplateSelectionBox;
-
-	TSharedPtr<class SComboBox<TSharedPtr<FUGCPluginInfo>>> TemplateExportSelectionBox;
 	TSharedPtr<class IDetailsView> ExportDescriptorDetails;
 	class UUGCTemplateDescriptor* ExportDescriptor;
 	//TSharedPtr<class UUGCTemplateDescriptor> ExportDescriptor;
 
 	TSharedPtr<SEditableTextBox> NewModNameInput;
-
-	TSharedPtr<class SUGCTemplateSubsitutionWidget> CurrentSubMenu;
 
 	TSharedPtr<class SExpandableArea> LogExpandableArea;
 	TSharedPtr<class SMultiLineEditableTextBox> LogText;
@@ -98,15 +107,36 @@ private:
 	FDelegateHandle OnPluginCreatedHandle;
 	FDelegateHandle OnPluginMountedHandle;
 
-public:
-	FReply ToModTemplates();
-	FReply ToItemTemplates();
-	FReply ToExportTemplate();
-	FReply OnClickedAddItem();
-	FReply OnClickedAddMod();
-	FReply OnClickedExport();
-	TSharedRef<SWidget> GeneratePluginComboBoxWidget(TSharedPtr<FUGCPluginInfo> Item);
-	TSharedRef<SWidget> GenerateTemplateComboBoxWidget(TSharedPtr<FUGCTemplateInfo> Item);
+	////
+	TSharedRef<SWidget> CreateCatergoriesWidget();
+	TSharedRef<SWidget> CreateTemplatesWidget();
+	TSharedRef<SWidget> CreateDetailsWidget();
+	TSharedRef<SWidget> CreateOptionsWidget();
 
-	TSharedPtr<class SUGCTemplateSubsitutionWidget> GetSubMenuFor(TSharedPtr<FUGCTemplateInfo> Template);
+	FReply OnCreateClicked();
+	FReply OnCancelClicked();
+
+	void LoadCategories();
+
+	void OnListSelectionChanged(TSharedPtr<FUGCTemplateInfo> Item, ESelectInfo::Type SelectInfo);
+	void OnCategoryClicked(TSharedPtr<FUGCTemplateCategoryView> CategoryTile, ESelectInfo::Type SelectInfo);
+
+	TSharedPtr<SEditableTextBox> NewNameText;
+	TSharedPtr<class SUGCTemplateDetailsWidget> TemplateDetailsWidget;
+	TSharedPtr<class STileView<TSharedPtr<FUGCTemplateInfo>>> TemplateView;
+	TArray<TSharedPtr<FUGCTemplateCategoryView>> Categories;
+
+	EUGCTemplateType Mode = EUGCTemplateType::TT_Mod;
+	TSharedPtr<FUGCTemplateInfo> SelectedTemplate;
+	TArray<TSharedPtr<FUGCTemplateInfo>> FilteredTemplateOptions;
+
+	TSharedRef<SWidget> GeneratePluginComboBoxWidget(TSharedPtr<FUGCPluginInfo> Item);
+	TSharedPtr<FUGCPluginInfo> GetPluginInfoFrom(TSharedPtr<IPlugin> Context);
+
+private:
+
+	void SetDefaultTemplateSelection();
+
+	void DisplayNewModNotification(bool bSuccess, const TArray<FString>& FocusPaths);
+	void DisplayAddItemNotification(bool bSuccess, const TArray<FString>& FocusPaths);
 };

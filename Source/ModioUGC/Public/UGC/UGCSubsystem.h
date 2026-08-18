@@ -209,6 +209,35 @@ public:
 			  Category = "mod.io|UGC|Utilities")
 	TArray<FName> GetPackageNamesFromUGCPackage(const FUGCPackage& UGCPackage) const;
 
+	/**
+	 * Sets a function to sanitize filepaths for UGC packages.
+	 */
+	void SetFilePathSanitizationFn(TFunction<FString(FString&)> InFunc);
+
+	/**
+	 * Sets a function to prepare the filesystem for discovering UGC paths.
+	 * For example, some platforms may require mounting a directory to access its contents
+	 */
+	void SetPrepareFilesystemToUsePathFn(TFunction<bool(const FString&)> InFunc);
+
+	/**
+	 * Sanitizes a file path for UGC packages using the provided sanitization function.
+	 * If no sanitization function is set, it will return the original file path.
+	 *
+	 * @param FilePath The file path to sanitize
+	 * @return The sanitized file path
+	 */
+	FString SanitizeFilePath(FString& FilePath) const;
+
+	/**
+	 * Prepares the filesystem to use a specific path using the provided preparation function.
+	 * If no preparation function is set, it will return false by default.
+	 *
+	 * @param Path The path to prepare the filesystem for
+	 * @return bool indicating whether the preparation was successful
+	 */
+	bool PrepareFilesystemToUsePath(const FString& Path) const;
+
 protected:
 	//~ Begin IModEnabledStateProvider Interface
 	virtual bool NativeQueryIsModEnabled(FGenericModID ModID) override;
@@ -305,4 +334,15 @@ private:
 	 */
 	UPROPERTY()
 	FOnUGCProviderDeinitializedDelegate OnUGCProviderDeinitializedHandler;
+
+	/**
+	 * Function to sanitize file paths for UGC packages
+	 * This should be used to ensure that file paths are valid and follow the expected format of UGC package storage.
+	 */
+	TFunction<FString(FString&)> FilePathSanitizationFn = nullptr;
+
+	/**
+	 * Function to prepare filesystem to discover UGC paths
+	 */
+	TFunction<bool(const FString&)> PrepareFilesystemToUsePathFn = nullptr;
 };

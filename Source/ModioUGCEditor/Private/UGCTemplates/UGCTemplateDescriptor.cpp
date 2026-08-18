@@ -10,6 +10,10 @@ const FString UUGCTemplateDescriptor::TypeFieldName = "Type";
 const FString UUGCTemplateDescriptor::ParamArrayFieldName = "Parameters";
 const FString UUGCTemplateDescriptor::ChildTemplatesFieldName = "ChildTemplates";
 const FString UUGCTemplateDescriptor::ChildObjectsFieldName = "ChildObjects";
+const FString UUGCTemplateDescriptor::DescriptionFieldName = "Description";
+const FString UUGCTemplateDescriptor::TemplateVersionFieldName = "TemplateVersion";
+const FString UUGCTemplateDescriptor::CategoryFieldName = "Category";
+
 
 
 bool UUGCTemplateDescriptor::Load(TArray<uint8> Data, UUGCTemplateDescriptor* Descriptor)
@@ -78,6 +82,27 @@ bool UUGCTemplateDescriptor::Load(TArray<uint8> Data, UUGCTemplateDescriptor* De
 		}
 	}
 
+	FString Description;
+	bool bFoundDescription = JsonObject->TryGetStringField(DescriptionFieldName, Description);
+	if (bFoundDescription)
+	{
+		Descriptor->Description = Description;
+	}
+
+	FString Category;
+	bool bFoundCategory = JsonObject->TryGetStringField(CategoryFieldName, Category);
+	if (bFoundCategory)
+	{
+		Descriptor->Category = Category;
+	}
+
+	FString TemplateVersion;
+	bool bFoundTemplateVersion = JsonObject->TryGetStringField(TemplateVersionFieldName, TemplateVersion);
+	if (bFoundTemplateVersion)
+	{
+		Descriptor->TemplateVersion = TemplateVersion;
+	}
+
 	return true;
 }
 
@@ -120,6 +145,11 @@ bool UUGCTemplateDescriptor::Save(const UUGCTemplateDescriptor* Descriptor, TArr
 	}
 	JsonObject->SetArrayField(ChildObjectsFieldName, ChildObjects);
 
+	JsonObject->SetStringField(DescriptionFieldName, Descriptor->Description);
+
+	JsonObject->SetStringField(CategoryFieldName, Descriptor->Category);
+
+	JsonObject->SetStringField(TemplateVersionFieldName, Descriptor->TemplateVersion);
 
 	FString JsonText;
 	{

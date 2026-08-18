@@ -34,6 +34,8 @@ void SUGCTemplateSubsitutionWidget::Construct(const FArguments& InArgs)
 			SNew(SImage).Image(BackgroundBrush)
 		]
 		+SOverlay::Slot()
+		.HAlign(HAlign_Fill)
+		.VAlign(VAlign_Fill)
 		[
 			SNew(SVerticalBox)
 			+SVerticalBox::Slot()
@@ -62,7 +64,7 @@ void SUGCTemplateSubsitutionWidget::Construct(const FArguments& InArgs)
 			.Padding(2.5f)
 			.AutoHeight()
 			[
-				SNew(SBox)
+				SNew(SBox).Visibility(EVisibility::Collapsed)
 				.MinDesiredHeight(50)
 				.MaxDesiredHeight(50)
 				[
@@ -78,7 +80,7 @@ void SUGCTemplateSubsitutionWidget::Construct(const FArguments& InArgs)
 	// clang-format on
 }
 
-void SUGCTemplateSubsitutionWidget::BuildFor(const TSharedPtr<FUGCTemplateInfo> Template)
+void SUGCTemplateSubsitutionWidget::BuildFor(const FUGCTemplateInfo& Template)
 {
 	if (!SubContainer.IsValid())
 	{
@@ -87,7 +89,7 @@ void SUGCTemplateSubsitutionWidget::BuildFor(const TSharedPtr<FUGCTemplateInfo> 
 
 	TSet<FString> Substitutions;
 	auto TemplateSubsystem = GEditor->GetEditorSubsystem<UUGCTemplateSubsystem>();
-	TemplateSubsystem->GetSubstitutionsFor(*(Template.Get()), Substitutions);
+	TemplateSubsystem->GetSubstitutionsFor(Template, Substitutions);
 	for (auto& Sub : Substitutions)
 	{
 		// clang-format off
@@ -119,12 +121,17 @@ void SUGCTemplateSubsitutionWidget::BuildFor(const TSharedPtr<FUGCTemplateInfo> 
 			]
 		];
 		// clang-format on
-
+		
 		if (SubInput != nullptr)
 		{
 			SubWidgetMapping.Add(Sub, SubInput);
 		}
 	}
+}
+
+void SUGCTemplateSubsitutionWidget::BuildFor(const TSharedPtr<FUGCTemplateInfo> Template)
+{
+	BuildFor(*(Template.Get()));
 }
 
 void SUGCTemplateSubsitutionWidget::GetSubs(TMap<FString, FString>& OutSubs)

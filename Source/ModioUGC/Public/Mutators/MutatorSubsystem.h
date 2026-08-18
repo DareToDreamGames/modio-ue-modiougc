@@ -11,10 +11,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Subsystems/GameInstanceSubsystem.h"
 #include "GameplayTagContainer.h"
 #include "InstancedStruct.h"
 #include "MutatorUtils.h"
+#include "Subsystems/GameInstanceSubsystem.h"
 
 class AController;
 
@@ -22,8 +22,6 @@ class AController;
 #include "MutatorSubsystem.generated.h"
 
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnRecieveEventDelegate, const FInstancedStruct&, Context);
-
-
 
 /**
  * Handle to a registered mutator
@@ -34,12 +32,11 @@ struct MODIOUGC_API FMutatorHandle
 	GENERATED_BODY()
 
 public:
-
 	/**
 	 * Checks if the handle is valid
 	 * @return Whether the handle is valid
 	 */
-	bool IsValid() const 
+	bool IsValid() const
 	{
 		return Instance != nullptr;
 	}
@@ -63,7 +60,6 @@ public:
 	}
 
 private:
-	
 	int32 Priority = -1;
 	class UUGCMutator* Instance = nullptr;
 
@@ -71,15 +67,14 @@ private:
 };
 
 /**
-* Intermediate struct used to bypass not being able to have TArray of mutators as the registry key.
-*/
+ * Intermediate struct used to bypass not being able to have TArray of mutators as the registry key.
+ */
 USTRUCT()
 struct FMutatorPriorityBucket
 {
 	GENERATED_BODY()
 
 public:
-	
 	int32 Add(class UUGCMutator* Mutator)
 	{
 		return Contents.Add(Mutator);
@@ -90,16 +85,16 @@ public:
 		return Contents.Remove(Mutator);
 	}
 
-//private:
-	
+	// private:
+
 	UPROPERTY()
-	TArray<class UUGCMutator*> Contents;
+	TArray<TObjectPtr<class UUGCMutator>> Contents;
 
 	friend class UUGCMutatorSubsystem;
 };
 
 /**
- * 
+ *
  */
 UCLASS(BlueprintType)
 class MODIOUGC_API UUGCMutatorSubsystem : public UGameInstanceSubsystem
@@ -107,7 +102,6 @@ class MODIOUGC_API UUGCMutatorSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
-
 	void Initialize(FSubsystemCollectionBase& Collection) override;
 
 	/**
@@ -146,16 +140,12 @@ public:
 	bool GetMutatorClassList(TArray<TSubclassOf<UUGCMutator>>& OutMutators, bool bUseCache = true);
 
 public:
-	
-	
-	
 	MUTATOR_EVENTS_START
-	DEFINE_MUTATOR(PostPlayerInit, class AController*, Controller)
-	DEFINE_MUTATOR(PostPawnSpawned, class APawn*, Pawn)
+	DEFINE_MUTATOR(PostPlayerInit, TObjectPtr<class AController>, Controller)
+	DEFINE_MUTATOR(PostPawnSpawned, TObjectPtr<class APawn>, Pawn)
 	MUTATOR_EVENTS_END
 
 public:
-
 	/**
 	 * Checks to see if a mutator of a given type is registereed or not
 	 * @param Type the type of mutator to check for
@@ -164,12 +154,10 @@ public:
 	bool IsRegistered(TSubclassOf<UUGCMutator> Type);
 
 protected:
-
 	UPROPERTY()
 	TMap<int32, FMutatorPriorityBucket> MutatorRegistry;
 
 private:
-
 	UPROPERTY()
 	TArray<TSubclassOf<UUGCMutator>> MutatorCache;
 

@@ -9,7 +9,7 @@
  */
 
 #pragma once
-
+#include "GenericPlatform/GenericPlatformFile.h"
 #include "ModioUGC.h"
 
 class FPakFileContentsIterator final : public IPlatformFile::FDirectoryVisitor

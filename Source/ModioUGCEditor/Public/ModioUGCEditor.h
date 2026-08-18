@@ -14,6 +14,7 @@
 #include "ModioUGCPackager.h"
 #include "Modules/ModuleManager.h"
 #include "Slate.h"
+#include "UGCTemplates/UGCTemplateDescriptor.h"
 
 class FToolBarBuilder;
 class FMenuBuilder;
@@ -56,9 +57,44 @@ public:
 
 	//~ End Pak File Override
 
+	void RegisterSettings();
+	void UnregisterSettings();
+
+	void RegisterClassLayoutCustomisation(FName ClassName, FOnGetDetailCustomizationInstance DetailLayoutDelegate);
+
 	void RegisterMenus();
-	void OnUGCTemplateMenuButtonClicked();
+	void RegisterUGCTemplateMenus();
+
+	void OnCreateUGCTemplateModMenuButtonClicked();
+	void OnAddUGCTemplateItemMenuButtonClicked();
+	void OnExportUGCTemplateMenuButtonClicked();
+
+	void OnAddUGCTemplateItemFromContentBrower();
+	void OnExportUGCTemplateFromContentBrower();
+
+	bool CreateTemplateWindow(EUGCTemplateType Mode, TSharedPtr<IPlugin> Context = nullptr);
+	bool CreateExportWindow(TSharedPtr<IPlugin> Context = nullptr);
+
+	void DismissUGCTemplateWindow();
+
+private:
 
 	TSharedPtr<class SWindow> UGCTemplateWindow = nullptr;
 	TSharedPtr<class SModioEditorUGCTemplateWidget> TemplateWidget = nullptr;
+	TSharedPtr<class SModioExportUGCTemplateWidget> ExportWidget = nullptr;
+
+	TSet<FName> RegisteredClassNames;
+
+	static FDelayedAutoRegisterHelper ModdingContextMenuRegister;
+
+	static TSharedPtr<IPlugin> GetSelectedPlugin();
+	static TSharedPtr<IPlugin> GetPluginFromPath(const FString& PluginPath);
+
+	static const FText CreateModLabel;
+	static const FText CreateModTooltip;
+	static const FText AddItemLabel;
+	static const FText AddItemTooltip;
+	static const FText ExportTemplateLabel;
+	static const FText ExportTemplateTooltip;
+	static const FText ModdingSectionLabel;
 };

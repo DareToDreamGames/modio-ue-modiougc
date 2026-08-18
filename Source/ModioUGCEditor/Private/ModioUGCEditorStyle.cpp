@@ -60,6 +60,14 @@ TSharedRef<FSlateStyleSet> FModioUGCEditorStyle::Create()
 	Style->Set("ModioUGCEditor.PackageUGCAction", new IMAGE_BRUSH(TEXT("PackageUGC_64x"), Icon40x40));
 	Style->Set("ModioUGCEditor.CreateUGCAction", new IMAGE_BRUSH(TEXT("CreateUGC_64x"), Icon40x40));
 
+	Style->Set("ModioUGCEditor.CreateUGCToolbarIcon", new IMAGE_BRUSH(TEXT("NewMod_48x"), Icon40x40));
+	Style->Set("ModioUGCEditor.AddItemToolbarIcon", new IMAGE_BRUSH(TEXT("AddItem_48x"), Icon40x40));
+	Style->Set("ModioUGCEditor.ExportTemplateToolbarIcon", new IMAGE_BRUSH(TEXT("CreateTemplateFromMod_48x"), Icon40x40));
+
+	Style->Set("ModioUGCEditor.CreateUGCMenuIcon", new IMAGE_BRUSH(TEXT("NewMod_48x"), Icon20x20));
+	Style->Set("ModioUGCEditor.AddItemMenuIcon", new IMAGE_BRUSH(TEXT("AddItem_48x"), Icon20x20));
+	Style->Set("ModioUGCEditor.ExportTemplateMenuIcon", new IMAGE_BRUSH(TEXT("CreateTemplateFromMod_48x"), Icon20x20));
+
 	return Style;
 }
 

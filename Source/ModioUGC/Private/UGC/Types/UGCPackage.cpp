@@ -22,8 +22,8 @@
 #include "ShaderCodeLibrary.h"
 #include "UGC/Types/UGC_Metadata.h"
 #include "UGC/Utilities/PakFileHelpers.h"
-#include "ModioSubsystem.h"
 #include "Engine/Engine.h"
+#include "UGC/UGCSubsystem.h"
 
 FScopedPlatformPakFileOverride::FScopedPlatformPakFileOverride()
 {
@@ -74,15 +74,14 @@ FUGCPackage::FUGCPackage(const TSharedRef<IPlugin> Plugin, TOptional<FGenericMod
 	DescriptorPath = Plugin->GetDescriptorFileName();
 	PackagePath = *Plugin->GetMountedAssetPath().LeftChop(1);
 	ContentPath = *Plugin->GetContentDir();
-	if (UModioSubsystem* ModioSubsystem = GEngine->GetEngineSubsystem<UModioSubsystem>())
+
+	if (UUGCSubsystem* UGCSubsystem = GEngine->GetEngineSubsystem<UUGCSubsystem>())
 	{
-		if (UObject* PortalInterfaceObject = ModioSubsystem->GetPortalInterfaceObject()) 
-		{
-			DescriptorPath = IModioPortalInterface::Execute_SanitizeFilePath(PortalInterfaceObject, DescriptorPath);
-			PackagePath = IModioPortalInterface::Execute_SanitizeFilePath(PortalInterfaceObject, PackagePath);
-			ContentPath = IModioPortalInterface::Execute_SanitizeFilePath(PortalInterfaceObject, ContentPath);
-		}
+		DescriptorPath = UGCSubsystem->SanitizeFilePath(DescriptorPath);
+		PackagePath = UGCSubsystem->SanitizeFilePath(PackagePath);
+		ContentPath = UGCSubsystem->SanitizeFilePath(ContentPath);
 	}
+
 	EngineVersion = *Plugin->GetDescriptor().EngineVersion;
 	Author = *Plugin->GetDescriptor().CreatedBy;
 	Description = *Plugin->GetDescriptor().Description;

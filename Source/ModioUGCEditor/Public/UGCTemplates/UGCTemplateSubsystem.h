@@ -1,4 +1,12 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+/*
+ *  Copyright (C) 2024-2026 mod.io Pty Ltd. <https://mod.io>
+ *
+ *  This file is part of the mod.io UE Plugin.
+ *
+ *  Distributed under the MIT License. (See accompanying file LICENSE or
+ *   view online at <https://github.com/modio/modio-ue/blob/main/LICENSE>)
+ *
+ */
 
 #pragma once
 
@@ -24,7 +32,10 @@ public:
 	FString Path;
 
 	UPROPERTY(BlueprintReadOnly, Category = "mod.io|Mods|Templates")
-	class UUGCTemplateDescriptor* Descriptor;
+	TObjectPtr<class UTexture2D> Thumbnail = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, Category = "mod.io|Mods|Templates")
+	TObjectPtr< class UUGCTemplateDescriptor> Descriptor = nullptr;
 };
 
 USTRUCT(BlueprintType)
@@ -49,6 +60,17 @@ public:
 
 	FString SubstitutionBase;
 	FString File;
+
+};
+
+USTRUCT(BlueprintType)
+struct FUGCTemplateResult
+{
+	GENERATED_BODY()
+
+public:
+
+	TSharedPtr<IPlugin> Plugin = nullptr;
 
 };
 
@@ -84,19 +106,19 @@ public:
 	//// Create copies of files at destination
 	//// Load new plugin
 	UFUNCTION(BlueprintCallable, Category = "mod.io|Mods|Templates")
-	bool CreateUGCFromTemplate(FString NewModName, const FUGCTemplateInfo& TemplateInfo, const TMap<FString, FString>& Substitutions);
+	bool CreateUGCFromTemplate(FString NewModName, const FUGCTemplateInfo& TemplateInfo, const TMap<FString, FString>& Substitutions, FUGCTemplateResult& Result);
 
 	//AddTemplateItem
 	//// Read contents from file
 	//// Add new files to existing mod
 	UFUNCTION(BlueprintCallable, Category = "mod.io|Mods|Templates")
-	bool AddUGCTemplateItemTo(const FUGCPluginInfo& Mod, const FUGCTemplateInfo& TemplateInfo, const TMap<FString, FString>& Substitutions);
+	bool AddUGCTemplateItemTo(const FUGCPluginInfo& Mod, const FUGCTemplateInfo& TemplateInfo, const TMap<FString, FString>& Substitutions, const FString& ItemName);
 	
 	//ExportTemplate
 	//// Create Zip from selected plugin
 	//// Add to Template Source directory
 	UFUNCTION(BlueprintCallable, Category = "mod.io|Mods|Templates")
-	bool ExportUGCTemplate(const FUGCPluginInfo& Mod, class UUGCTemplateDescriptor* TemplateDescriptor, bool bAutoReplaceName = false);
+	bool ExportUGCTemplate(const FUGCPluginInfo& Mod, const FString& Name, class UUGCTemplateDescriptor* TemplateDescriptor, bool bAutoReplaceName = false);
 
 	UFUNCTION(BlueprintCallable, Category = "mod.io|Mods|Templates")
 	void GetTemplates(TArray<FUGCTemplateInfo>& Templates) const;
@@ -109,14 +131,20 @@ public:
 
 	bool IsValidModName(FString ModName, FString& FailReason);
 
-private:
+	void GetCategories(TArray<struct FUGCTemplateCategoryView>& OutCategories);
 
 	FString GetTemplateDirectory() const;
+
+private:
+
 	bool AddUGCTemplateItemTo_Internal(const FUGCPluginInfo& Mod, const FUGCTemplateInfo& TemplateInfo, const TMap<FString, FString>& Substitutions);
 	bool ExtractTemplateDescriptor(FUGCTemplateInfo& TemplateInfo);
+	bool ExtractTemplateThumbnail(FUGCTemplateInfo& TemplateInfo, TArray<uint8> ThumbnailBuffer);
+	bool ExtractResourcesFromTemplate(class FZipArchiveReader& Reader, FString DestinationDirectory);
 	bool ExtractFilesFromTemplate(class FZipArchiveReader& Reader, FString DestinationDirectory, const TMap<FString, FString>& Substitutions);
 	bool ExtractChildTemplateItems(const FUGCPluginInfo& Mod, const TArray<struct FChildTemplateEntry>& ChildTemplates, const TMap<FString, FString>& Substitutions);
 	bool CreateChildObjects(const FUGCPluginInfo& Mod, const TArray<struct FUGCChildObject>& ChildObjects, const TMap<FString, FString>& Substitutions);
+	bool SaveFile(TArray<uint8>& Contents, const FString& Destination, const FString& Filename);
 
 	void VerifyTemplates(TArray<FUGCTemplateInfo>& Templates, TArray<FText>& Errors);
 
@@ -158,7 +186,7 @@ private:
 	TArray<FUGCTemplateInfo> CachedTemplates;
 
 	UPROPERTY()
-	class UTransaction* Transaction = nullptr;
+	TObjectPtr<class UTransaction> Transaction = nullptr;
 	
 	TArray<struct FChildTemplateEntry> IncludeStack;
 	TArray<FString> FilesToScan;

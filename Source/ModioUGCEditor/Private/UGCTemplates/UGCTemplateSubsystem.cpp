@@ -20,8 +20,12 @@
 #include "UGCTemplates/TransactionStep.h"
 #include "UObject/CoreRedirects.h"
 #include "UObject/SavePackage.h"
+#include "UGCTemplates/UGCTemplateSettings.h"
+#include "../../Engine/Public/ImageUtils.h"
 
 DEFINE_LOG_CATEGORY(LogModioUGCTemplates)
+
+#define LOCTEXT_NAMESPACE "UUGCTemplateSubsystem"
 
 void UUGCTemplateSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -47,7 +51,7 @@ FString UUGCTemplateSubsystem::FormatLogMessageInternal(const TCHAR* Format, ...
 	while (Result == -1)
 	{
 		Buffer = (TCHAR*) FMemory::Realloc(Buffer, BufferSize * sizeof(TCHAR));
-		GET_VARARGS_RESULT(Buffer, BufferSize, BufferSize - 1, Format, Format, Result);
+		GET_TYPED_VARARGS_RESULT(TCHAR, Buffer, BufferSize, BufferSize - 1, Format, Format, Result);
 		if (Result == -1)
 		{
 			BufferSize *= 2;
@@ -110,7 +114,7 @@ void UUGCTemplateSubsystem::DiscoverUGC(TArray<FUGCPluginInfo>& UGCPlugins)
 	}
 }
 
-bool UUGCTemplateSubsystem::CreateUGCFromTemplate(FString NewModName, const FUGCTemplateInfo& TemplateInfo, const TMap<FString, FString>& Substitutions) 
+bool UUGCTemplateSubsystem::CreateUGCFromTemplate(FString NewModName, const FUGCTemplateInfo& TemplateInfo, const TMap<FString, FString>& Substitutions, FUGCTemplateResult& Result) 
 {
 	Transaction->Begin();
 	LogInfo("Begin CreateUGCFromTemplate: %s", *(TemplateInfo.Name));
@@ -131,7 +135,7 @@ bool UUGCTemplateSubsystem::CreateUGCFromTemplate(FString NewModName, const FUGC
 			return false;
 		}
 		
-		auto TemplateFileName = TemplateInfo.Name + ".template";
+		auto TemplateFileName = "ugc.template";
 		auto EmbeddedFileNames = Reader.GetFileNames();
 
 		if (EmbeddedFileNames.Find(TemplateFileName) == INDEX_NONE)
@@ -176,6 +180,7 @@ bool UUGCTemplateSubsystem::CreateUGCFromTemplate(FString NewModName, const FUGC
 			LogError("Could not create new mod %s", *NewModName);
 			return false;
 		}
+		Result.Plugin = LoadedPlugin;
 		Transaction->Add(UTransactionStepCreatePlugin::Make(LoadedPlugin));
 		
 		TMap<FString, FString> FullSubstitutions = Substitutions;
@@ -184,7 +189,8 @@ bool UUGCTemplateSubsystem::CreateUGCFromTemplate(FString NewModName, const FUGC
 
 		//ExtractFilesFromTemplate(Reader, DestinationDirectory, FullSubstitutions);
 		bool bSuccess = true;
-		bSuccess = ExtractFilesFromTemplate(Reader, LoadedPlugin->GetBaseDir(), FullSubstitutions);
+		bSuccess &= ExtractResourcesFromTemplate(Reader, LoadedPlugin->GetBaseDir());
+		bSuccess &= ExtractFilesFromTemplate(Reader, LoadedPlugin->GetBaseDir(), FullSubstitutions);
 		if (!bSuccess)
 		{
 			//clean up
@@ -223,11 +229,11 @@ bool UUGCTemplateSubsystem::CreateUGCFromTemplate(FString NewModName, const FUGC
 }
 
 bool UUGCTemplateSubsystem::AddUGCTemplateItemTo(const FUGCPluginInfo& Mod, const FUGCTemplateInfo& TemplateInfo,
-												 const TMap<FString, FString>& Substitutions)
+												 const TMap<FString, FString>& Substitutions, const FString& ItemName)
 {
 	Transaction->Begin();
 	TMap<FString, FString> FullSubstitutions = Substitutions;
-	FullSubstitutions.Add("___UGCNAME___", Mod.Name);
+	FullSubstitutions.Add("___UGCNAME___", ItemName);
 	FullSubstitutions.Add("___MODNAME___", Mod.Name);
 
 	bool bSuccess = AddUGCTemplateItemTo_Internal(Mod, TemplateInfo, FullSubstitutions);
@@ -258,7 +264,7 @@ bool UUGCTemplateSubsystem::AddUGCTemplateItemTo_Internal(const FUGCPluginInfo& 
 			return false;
 		}
 			
-		auto TemplateFileName = TemplateInfo.Name + ".template";
+		auto TemplateFileName = "ugc.template";
 		auto EmbeddedFileNames = Reader.GetFileNames();
 
 		if (EmbeddedFileNames.Find(TemplateFileName) == INDEX_NONE)
@@ -289,31 +295,31 @@ bool UUGCTemplateSubsystem::AddUGCTemplateItemTo_Internal(const FUGCPluginInfo& 
 	}
 }
 
-bool UUGCTemplateSubsystem::ExportUGCTemplate(const FUGCPluginInfo& Mod, class UUGCTemplateDescriptor* TemplateDescriptor, bool bAutoReplaceName /*= false*/)
+bool UUGCTemplateSubsystem::ExportUGCTemplate(const FUGCPluginInfo& Mod, const FString& Name, class UUGCTemplateDescriptor* TemplateDescriptor, bool bAutoReplaceName /*= false*/)
 {
 	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 	{
-		LogInfo("Exporting %s template", *(Mod.Name));
-		FZipArchiveWriter ZipWriter(PlatformFile.OpenWrite(*(FPaths::Combine(GetTemplateDirectory(), Mod.Name + ".zip"))));
+		FString ExportName = "ugc";
+		LogInfo("Exporting %s template as %s", *(Mod.Name), *ExportName);
+		FZipArchiveWriter ZipWriter(PlatformFile.OpenWrite(*(FPaths::Combine(GetTemplateDirectory(), ExportName + ".zip"))));
 
 		//write template file
 		TArray<uint8> TemplateDescriptorContents;
 		bool bSuccess = UUGCTemplateDescriptor::Save(TemplateDescriptor, TemplateDescriptorContents);
 		if (!bSuccess)
 		{
-			LogError("Could not save template descriptor for %s", *(Mod.Name));
+			LogError("Could not save template descriptor for %s", *(ExportName));
 			return false;
 		}
-		ZipWriter.AddFile(Mod.Name + ".template", TemplateDescriptorContents, FDateTime::Now());
-		LogInfo("Exporting %s", *(Mod.Name + ".template"));
+		ZipWriter.AddFile(ExportName + ".template", TemplateDescriptorContents, FDateTime::Now());
+		LogInfo("Exporting %s", *(ExportName + ".template"));
 
 		FString NameReplacement = TemplateDescriptor->Type == EUGCTemplateType::TT_Mod ? "___MODNAME___" : "___UGCNAME___";
 		FString ExportDir = Mod.Plugin->GetBaseDir();
 		//add files from base dir to zip
 		IFileManager::Get().IterateDirectoryRecursively(
 			*ExportDir, 
-			[this, &ZipWriter, &PlatformFile, &ExportDir, &Mod, &bAutoReplaceName, &NameReplacement, &TemplateDescriptor](const TCHAR* Pathname,
-																										bool bIsDirectory)
+			[this, &ZipWriter, &PlatformFile, &ExportDir, &Mod, &ExportName, &bAutoReplaceName, &NameReplacement, &TemplateDescriptor](const TCHAR* Pathname, bool bIsDirectory)
 			{
 				bool bIsMetaDataFile = FPaths::GetBaseFilename(Pathname).Equals("U" + UUGC_Metadata::StaticClass()->GetName());
 				bool bIsPluginFile = FPaths::GetExtension(Pathname, true).Equals(".uplugin");
@@ -326,7 +332,7 @@ bool UUGCTemplateSubsystem::ExportUGCTemplate(const FUGCPluginInfo& Mod, class U
 					FFileHelper::LoadFileToArray(Contents, Pathname);
 					if (bAutoReplaceName)
 					{
-						EmbeddedPath.ReplaceInline(*(Mod.Name), *NameReplacement);
+						EmbeddedPath.ReplaceInline(*(ExportName), *NameReplacement);
 					}
 					ZipWriter.AddFile(EmbeddedPath, Contents, FDateTime::Now());
 				}
@@ -335,7 +341,7 @@ bool UUGCTemplateSubsystem::ExportUGCTemplate(const FUGCPluginInfo& Mod, class U
 
 	}
 
-	return false;
+	return true;
 }
 
 void UUGCTemplateSubsystem::GetTemplates(TArray<FUGCTemplateInfo>& Templates) const
@@ -356,6 +362,7 @@ FString UUGCTemplateSubsystem::GetTemplateDirectory() const
 bool UUGCTemplateSubsystem::ExtractTemplateDescriptor(FUGCTemplateInfo& TemplateInfo)
 {
 	TArray<uint8> Contents;
+	TArray<uint8> ThumbnailContents;
 	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 	{
 		LogInfo("Extracting Template descriptor for %s", *(TemplateInfo.Name));
@@ -367,27 +374,73 @@ bool UUGCTemplateSubsystem::ExtractTemplateDescriptor(FUGCTemplateInfo& Template
 			return false;
 		}
 
-		auto TemplateFilename = TemplateInfo.Name + ".template";
-		auto Names = Reader.GetFileNames();
+		FString TemplateFilename = "ugc.template";
 	
 		if (!Reader.TryReadFile(TemplateFilename, Contents))
 		{
 			LogError("Could not read contents of archive for %s [%s]", *(TemplateInfo.Name), *(TemplateInfo.Path));
 			return false;
 		}
+
+		auto Names = Reader.GetFileNames();
+		FString* ThumbnailFilename = Names.FindByPredicate([](const FString& Filename) { return Filename.Contains("Resources/Thumbnail"); });
+		if (ThumbnailFilename != nullptr && Reader.TryReadFile(*ThumbnailFilename, ThumbnailContents))
+		{
+			ExtractTemplateThumbnail(TemplateInfo, ThumbnailContents);
+		}
 	}
 
 	return UUGCTemplateDescriptor::Load(Contents, TemplateInfo.Descriptor);
 }
 
+bool UUGCTemplateSubsystem::ExtractTemplateThumbnail(FUGCTemplateInfo& TemplateInfo, TArray<uint8> ThumbnailBuffer)
+{
+	TemplateInfo.Thumbnail = FImageUtils::ImportBufferAsTexture2D(ThumbnailBuffer);
+	return TemplateInfo.Thumbnail != nullptr;
+}
+
+bool UUGCTemplateSubsystem::ExtractResourcesFromTemplate(class FZipArchiveReader& Reader, FString DestinationDirectory)
+{
+	auto Names = Reader.GetFileNames().FilterByPredicate([](const FString& Filename){ return Filename.StartsWith("Resources/"); });
+
+	bool bSuccess = true;
+	for (FString& EmbeddedFilename : Names)
+	{
+		TArray<uint8> Contents;
+		if (!Reader.TryReadFile(EmbeddedFilename, Contents))
+		{
+			LogError("Could not read file %s from template archive", *EmbeddedFilename);
+			return false;
+		}
+
+		if (Contents.IsEmpty())
+		{
+			// TODO: Assume this is a directory for the moment and continue
+			continue;
+		}
+
+		FString FilePath = FPaths::Combine(DestinationDirectory, FPaths::GetPath(EmbeddedFilename));
+		bSuccess &= SaveFile(Contents, FilePath, EmbeddedFilename);
+	}
+
+	return bSuccess;
+}
+
 bool UUGCTemplateSubsystem::ExtractFilesFromTemplate(class FZipArchiveReader& Reader, FString DestinationDirectory, const TMap<FString, FString>& Substitutions)
 {
+	bool bSuccess = true;
 	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 	for (FString& EmbeddedFileName : Reader.GetFileNames())
 	{
 		if (FPaths::GetExtension(EmbeddedFileName, true).Equals(".template"))
 		{
 			//skip the template file
+			continue;
+		}
+
+		//Skip Resources
+		if (EmbeddedFileName.StartsWith("Resources/"))
+		{
 			continue;
 		}
 
@@ -406,25 +459,11 @@ bool UUGCTemplateSubsystem::ExtractFilesFromTemplate(class FZipArchiveReader& Re
 
 		FString FilePath = FPaths::Combine(DestinationDirectory, FPaths::GetPath(EmbeddedFileName));
 		FString SubstitutedDestination = ResolveSubstitutions(FilePath, Substitutions);
-		FString DestinationFilename = FPaths::Combine(SubstitutedDestination, FPaths::GetCleanFilename(EmbeddedFileName));
-	
-		FString FileExtension = FPaths::GetExtension(DestinationFilename);
-		if (FileExtension.Equals("uasset") || FileExtension.Equals("umap")) 
-		{
-			AddFileForRename(DestinationFilename);
-		}
 
-		bool bSuccessfulWrite = FFileHelper::SaveArrayToFile(Contents, *DestinationFilename);
-		if (!bSuccessfulWrite)
-		{
-			LogError("Could not write file %s to %s", *EmbeddedFileName, *DestinationFilename);
-			return false;
-		}
-		LogInfo("Writing file %s", *DestinationFilename);
-		Transaction->Add(UTransactionStepCreateFile::Make(DestinationFilename));
+		bSuccess &= SaveFile(Contents, SubstitutedDestination, EmbeddedFileName);
 	}
 
-	return true;
+	return bSuccess;
 }
 
 bool UUGCTemplateSubsystem::ExtractChildTemplateItems(const FUGCPluginInfo& Mod,
@@ -494,6 +533,27 @@ bool UUGCTemplateSubsystem::CreateChildObjects(const FUGCPluginInfo& Mod,
 	return true;
 }
 
+bool UUGCTemplateSubsystem::SaveFile(TArray<uint8>& Contents, const FString& Destination, const FString& Filename)
+{
+	FString DestinationFilename = FPaths::Combine(Destination, FPaths::GetCleanFilename(Filename));
+	FString FileExtension = FPaths::GetExtension(DestinationFilename);
+	if (FileExtension.Equals("uasset") || FileExtension.Equals("umap"))
+	{
+		AddFileForRename(DestinationFilename);
+	}
+
+	bool bSuccessfulWrite = FFileHelper::SaveArrayToFile(Contents, *DestinationFilename);
+	if (!bSuccessfulWrite)
+	{
+		LogError("Could not write file %s to %s", *Filename, *DestinationFilename);
+		return false;
+	}
+	LogInfo("Writing file %s", *DestinationFilename);
+	Transaction->Add(UTransactionStepCreateFile::Make(DestinationFilename));
+
+	return true;
+}
+
 void UUGCTemplateSubsystem::VerifyTemplates(TArray<FUGCTemplateInfo>& Templates, TArray<FText>& Errors) 
 {
 	// Verify Templates
@@ -537,6 +597,17 @@ bool UUGCTemplateSubsystem::IsValidModName(FString ModName, FString& FailReason)
 	}
 
 	return true;
+}
+
+void UUGCTemplateSubsystem::GetCategories(TArray<FUGCTemplateCategoryView>& OutCategories)
+{
+	auto UGCTemplateSettings = GetDefault<UUGCTemplateSettings>();
+	if (UGCTemplateSettings == nullptr)
+	{
+		return;
+	}
+	
+	OutCategories.Append(UGCTemplateSettings->Categories);
 }
 
 void UUGCTemplateSubsystem::GatherSubsitutionsFor(const FUGCTemplateInfo& TemplateInfo,
@@ -867,3 +938,5 @@ void UUGCTemplateSubsystem::SaveAssets(const TArray<FAssetData>& Assets)
 		}
 	}
 }
+
+#undef LOCTEXT_NAMESPACE

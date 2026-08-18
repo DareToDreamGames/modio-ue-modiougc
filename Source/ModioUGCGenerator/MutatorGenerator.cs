@@ -373,7 +373,6 @@ namespace ModioUGCGenerator.MutatorGenerator
         {
             UhtToken Matched = DetermineParsedParameterTypeToken(Tokens);
             UhtToken Copy = Matched;
-
 #if UE_5_5_OR_LATER
             var Header = Scope.HeaderFile;
 #else
@@ -392,8 +391,8 @@ namespace ModioUGCGenerator.MutatorGenerator
             IUhtTokenReader ReplayReader = UhtTokenReplayReader.GetThreadInstance(Header, Header.Data.Memory, new ReadOnlyMemory<UhtToken>(Tokens.ToArray()), UhtTokenType.EndOfDeclaration);
 #endif
 
-            //Lookup the property type by name from the registered list of valid types
-            if (Scope.Session.TryGetPropertyType(Matched.Value, out UhtPropertyType PropertyType))
+            //Lookup the property type by name from the registered list of valid types. Defer processing any non-immediate properties until the symbol table has been built and FindType is safe to call
+            if (Scope.Session.TryGetPropertyType(Matched.Value, out UhtPropertyType PropertyType) && PropertyType.Options.HasAnyFlags(UhtPropertyTypeOptions.Immediate))
             {
 #if UE_5_6_OR_LATER
                 //Create a property using its registered factory function
@@ -525,7 +524,10 @@ namespace ModioUGCGenerator.MutatorGenerator
                             borrower.StringBuilder.Append(" = ");
                             borrower.StringBuilder.Append(String.Join("", Member.DefaultValueTokens.Select(Token => Token.Value.ToString())));
                         }
-                        
+                        else
+                        {
+                            borrower.StringBuilder.Append(" = {}");
+                        }
                         borrower.StringBuilder.Append(";\r\n");
                         
                     }

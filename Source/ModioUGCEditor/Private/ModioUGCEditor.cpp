@@ -22,10 +22,26 @@
 #include "UGC/Types/UGCPackage.h"
 #include "UGC/UGCSubsystem.h"
 #include "UGCTemplates/Widgets/SModioEditorUGCTemplateWidget.h"
+#include "Developer/Settings/Public/ISettingsModule.h"
+#include "UGCTemplates/UGCTemplateSettings.h"
+#include "UGCTemplates/Widgets/SModioExportUGCTemplateWidget.h"
+#include "UGCTemplates/UGCTemplateExportCustomisation.h"
+#include "Editor/ContentBrowser/Public/ContentBrowserMenuContexts.h"
+#include "Editor/ContentBrowser/Private/SContentBrowser.h"
+#include "Editor/ContentBrowser/Public/ContentBrowserModule.h"
+#include "Interfaces/IPluginManager.h"
 
 DEFINE_LOG_CATEGORY(ModioUGCEditor);
 
 #define LOCTEXT_NAMESPACE "FModioUGCEditorModule"
+
+const FText FModioUGCEditorModule::CreateModLabel			= LOCTEXT("UGCTemplateCreateModMenuLabel", "New Mod from Template");
+const FText FModioUGCEditorModule::CreateModTooltip			= LOCTEXT("UGCTemplateCreteModMenuTooltip", "Create a new mod from a template");
+const FText FModioUGCEditorModule::AddItemLabel				= LOCTEXT("UGCTemplateAddItemMenuLabel", "Add Item");
+const FText FModioUGCEditorModule::AddItemTooltip			= LOCTEXT("UGCTemplateAddItemMenuTooltip", "Add a template item to UGC");
+const FText FModioUGCEditorModule::ExportTemplateLabel		= LOCTEXT("UGCTemplateExportMenuLabel", "Export Template to Mod");
+const FText FModioUGCEditorModule::ExportTemplateTooltip	= LOCTEXT("UGCTemplateExportMenuTooltip", "Export an existing plugin as a new UGC Template");
+const FText FModioUGCEditorModule::ModdingSectionLabel		= LOCTEXT("UGCTemplateModdingSectionLabel", "Modding");
 
 void FModioUGCEditorModule::StartupModule()
 {
@@ -37,6 +53,8 @@ void FModioUGCEditorModule::StartupModule()
 	FModioUGCEditorStyle::ReloadTextures();
 
 	RegisterPakFileOverride();
+
+	RegisterSettings();
 
 	const UModioUGCSettings* UGCSettings = GetDefault<UModioUGCSettings>();
 	if (UGCSettings && UGCSettings->bEnableUGCProviderInEditor)
@@ -70,6 +88,24 @@ void FModioUGCEditorModule::StartupModule()
 void FModioUGCEditorModule::ShutdownModule()
 {
 	UE_LOG(ModioUGCEditor, Display, TEXT("mod.io UGC Editor module unloaded."));
+
+	//Unregister any details customisations
+	if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))
+	{
+		FPropertyEditorModule& PropertyModule =
+			FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
+
+		// Unregister all classes customized by name
+		for (auto It = RegisteredClassNames.CreateConstIterator(); It; ++It)
+		{
+			if (It->IsValid())
+			{
+				PropertyModule.UnregisterCustomClassLayout(*It);
+			}
+		}
+	}
+
+	UnregisterSettings();
 
 	// This function may be called during shutdown to clean up your module.  For modules that support dynamic reloading,
 	// we call this function before unloading the module.
@@ -150,8 +186,52 @@ void FModioUGCEditorModule::TogglePakFileOverride(bool bEnable)
 	}
 }
 
+void FModioUGCEditorModule::RegisterSettings()
+{
+#if WITH_EDITOR
+	if (ISettingsModule* SettingsModule = FModuleManager::GetModulePtr<ISettingsModule>("Settings"))
+	{
+		SettingsModule->RegisterSettings("Project", "Plugins", "mod.io", LOCTEXT("UGCTemplateSettingsName", "mod.io UGC Templates"),
+										 LOCTEXT("UGCTemplateSettingsDescription", "Configure the mod.io UGC Template settings"),
+										 GetMutableDefault<UUGCTemplateSettings>());
+	}
+#endif
+}
+
+void FModioUGCEditorModule::UnregisterSettings()
+{
+#if WITH_EDITOR
+	if (ISettingsModule* SettingsModule = FModuleManager::GetModulePtr<ISettingsModule>("Settings"))
+	{
+		SettingsModule->UnregisterSettings("Project", "Plugins", "mod.io");
+	}
+#endif // WITH_EDITOR
+}
+
+void FModioUGCEditorModule::RegisterClassLayoutCustomisation(FName ClassName, FOnGetDetailCustomizationInstance DetailLayoutDelegate)
+{
+	check(ClassName != NAME_None);
+
+	RegisteredClassNames.Add(ClassName);
+
+	static FName PropertyEditor("PropertyEditor");
+	FPropertyEditorModule& PropertyModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>(PropertyEditor);
+	PropertyModule.RegisterCustomClassLayout(ClassName, DetailLayoutDelegate);
+}
+
 void FModioUGCEditorModule::RegisterMenus()
 {
+	UUGCTemplateSettings* TemplateSettings = GetMutableDefault<UUGCTemplateSettings>();
+	if (TemplateSettings != nullptr && TemplateSettings->bDisplayUGCTemplateMenus)
+	{
+		RegisterUGCTemplateMenus();
+	}
+}
+
+void FModioUGCEditorModule::RegisterUGCTemplateMenus()
+{
+	RegisterClassLayoutCustomisation("UGCTemplateExportDetails", FOnGetDetailCustomizationInstance::CreateStatic(&FUGCTemplateExportCustomisation::MakeInstance));
+
 	// Owner will be used for cleanup in call to UToolMenus::UnregisterOwner
 	FToolMenuOwnerScoped OwnerScoped(this);
 
@@ -162,6 +242,8 @@ void FModioUGCEditorModule::RegisterMenus()
 			//Section.AddMenuEntryWithCommandList(FModioEditorWindowCommands::Get().OpenPluginWindow, PluginCommands);
 		}
 	}
+
+	//Toolbar extension
 	{
 #if ENGINE_MAJOR_VERSION >= 5
 		FName ToolBarName = "LevelEditor.LevelEditorToolBar.PlayToolBar";
@@ -174,43 +256,295 @@ void FModioUGCEditorModule::RegisterMenus()
 		{
 			FToolMenuSection& Section = ToolbarMenu->FindOrAddSection(ExtensionPoint);
 			{
-				FToolMenuEntry& EntryButton = Section.AddEntry(
+				FToolMenuEntry& CreateButtonEntry = Section.AddEntry(
 					FToolMenuEntry::InitToolBarButton(
-						"UGCTemplatesMenuButton",
-						FUIAction(FExecuteAction::CreateRaw(this, &FModioUGCEditorModule::OnUGCTemplateMenuButtonClicked)),
-						FText::FromString("Templates"), 
-						FText::FromString("UGC Template Menu")
+						"UGCTemplatesCreateModMenuButton",
+						FUIAction(FExecuteAction::CreateRaw(this, &FModioUGCEditorModule::OnCreateUGCTemplateModMenuButtonClicked)),
+						CreateModLabel, 
+						CreateModTooltip,
+						FSlateIcon(FModioUGCEditorStyle::GetStyleSetName(), "ModioUGCEditor.CreateUGCToolbarIcon")
 						)
 					);
+
+				FToolMenuEntry& AddButtonEntry = Section.AddEntry(
+					FToolMenuEntry::InitToolBarButton(
+						"UGCTemplatesAddItemMenuButton",
+						FUIAction(FExecuteAction::CreateRaw(this, &FModioUGCEditorModule::OnAddUGCTemplateItemMenuButtonClicked)),
+						AddItemLabel,
+						AddItemTooltip,
+						FSlateIcon(FModioUGCEditorStyle::GetStyleSetName(), "ModioUGCEditor.AddItemToolbarIcon")
+					)
+				);
+
+				FToolMenuEntry& ExportButtonEntry = Section.AddEntry(
+					FToolMenuEntry::InitToolBarButton(
+						"UGCTemplatesExportTemplateMenuButton",
+						FUIAction(FExecuteAction::CreateRaw(this, &FModioUGCEditorModule::OnExportUGCTemplateMenuButtonClicked)),
+						ExportTemplateLabel, 
+						ExportTemplateTooltip,
+						FSlateIcon(FModioUGCEditorStyle::GetStyleSetName(), "ModioUGCEditor.ExportTemplateToolbarIcon")
+					)
+				);
 			}
 		}
 	}
+
+	//File menu extension
+	{
+		FToolMenuInsert InsertPos("Exit", EToolMenuInsertType::Before);
+		UToolMenu* Menu = UToolMenus::Get()->ExtendMenu("LevelEditor.MainMenu.File");
+		FToolMenuSection& ModdingSection = Menu->FindOrAddSection("Modding", ModdingSectionLabel);
+		ModdingSection.InsertPosition = InsertPos;
+		{
+			FToolMenuEntry& CreateFileMenuEntry = ModdingSection.AddEntry(
+				FToolMenuEntry::InitMenuEntry(
+					"UGCTemplatesCreateModFileMenuButton",
+					CreateModLabel,
+					CreateModTooltip,
+					FSlateIcon(FModioUGCEditorStyle::GetStyleSetName(), "ModioUGCEditor.CreateUGCMenuIcon"),
+					FUIAction(
+						FExecuteAction::CreateRaw(this, &FModioUGCEditorModule::OnCreateUGCTemplateModMenuButtonClicked))
+				)
+			);
+
+			FToolMenuEntry& ExportFileMenuEntry = ModdingSection.AddEntry(
+				FToolMenuEntry::InitMenuEntry(
+					"UGCTemplatesExportTemplateFileMenuButton",
+					ExportTemplateLabel,
+					ExportTemplateTooltip,
+					FSlateIcon(FModioUGCEditorStyle::GetStyleSetName(), "ModioUGCEditor.ExportTemplateMenuIcon"),
+					FUIAction(
+						FExecuteAction::CreateRaw(this, &FModioUGCEditorModule::OnExportUGCTemplateMenuButtonClicked))
+				)
+			);
+		}
+	}
+
+	//Content browser extensions
+	{
+		FToolMenuInsert InsertPos("ContentBrowserNewAsset", EToolMenuInsertType::Before);
+		UToolMenu* Menu = UToolMenus::Get()->ExtendMenu("ContentBrowser.AddNewContextMenu");
+
+		FToolMenuSection& ModdingSection = Menu->FindOrAddSection("Modding", ModdingSectionLabel);
+		ModdingSection.InsertPosition = InsertPos;
+
+		FToolMenuEntry& AddItemMenuEntry = ModdingSection.AddEntry(
+			FToolMenuEntry::InitMenuEntry(
+				"UGCTemplatesAddItemContextMenuButton",
+				AddItemLabel,
+				AddItemTooltip,
+				FSlateIcon(FModioUGCEditorStyle::GetStyleSetName(), "ModioUGCEditor.AddItemMenuIcon"),
+				FUIAction(
+					FExecuteAction::CreateRaw(this, &FModioUGCEditorModule::OnAddUGCTemplateItemFromContentBrower))
+			)
+		);
+
+		FToolMenuEntry& ExportModMenuEntry = ModdingSection.AddEntry(
+			FToolMenuEntry::InitMenuEntry(
+				"UGCTemplatesExportTemplateContextMenuButton",
+				ExportTemplateLabel,
+				ExportTemplateTooltip,
+				FSlateIcon(FModioUGCEditorStyle::GetStyleSetName(), "ModioUGCEditor.ExportTemplateMenuIcon"),
+				FUIAction(
+					FExecuteAction::CreateRaw(this, &FModioUGCEditorModule::OnExportUGCTemplateFromContentBrower))
+			)
+		);
+	}
 }
 
-void FModioUGCEditorModule::OnUGCTemplateMenuButtonClicked() 
+void FModioUGCEditorModule::OnCreateUGCTemplateModMenuButtonClicked() 
 {
+	CreateTemplateWindow(EUGCTemplateType::TT_Mod);
+}
+
+void FModioUGCEditorModule::OnAddUGCTemplateItemMenuButtonClicked()
+{
+	CreateTemplateWindow(EUGCTemplateType::TT_Item);
+}
+
+void FModioUGCEditorModule::OnExportUGCTemplateMenuButtonClicked()
+{
+	CreateExportWindow();
+}
+
+void FModioUGCEditorModule::OnAddUGCTemplateItemFromContentBrower() 
+{
+	CreateTemplateWindow(EUGCTemplateType::TT_Item, GetSelectedPlugin());
+}
+
+void FModioUGCEditorModule::OnExportUGCTemplateFromContentBrower()
+{
+	CreateExportWindow(GetSelectedPlugin());
+}
+
+FDelayedAutoRegisterHelper FModioUGCEditorModule::ModdingContextMenuRegister(EDelayedRegisterRunPhase::EndOfEngineInit, 
+	[]
+	{
+		FToolMenuOwnerScoped OwnerScoped(UE_MODULE_NAME);
+
+		static const FName FolderContextMenuName("ContentBrowser.FolderContextMenu");
+		UToolMenu* Menu = UToolMenus::Get()->FindMenu(FolderContextMenuName);
+
+		Menu->bCloseSelfOnly = true;
+
+		Menu->AddDynamicSection("Modding", 
+			FNewToolMenuDelegate::CreateLambda([](UToolMenu* InMenu)
+			{
+				UContentBrowserFolderContext* Context = InMenu->FindContext<UContentBrowserFolderContext>();
+				if (!Context || !Context->ContentBrowser.IsValid())
+				{
+					return;
+				}
+
+				//Check if we have one plugin selected and that it is a UGC plugin
+				TSharedPtr<IPlugin> Plugin = GetSelectedPlugin();
+				if(Plugin == nullptr || !Plugin->GetDescriptor().Category.Contains("UGC")) //TODO: take into account other possible values
+				{
+					return;
+				}
+
+				FToolMenuInsert InsertPos("PathViewFolderOptions", EToolMenuInsertType::Before);
+				FToolMenuSection& ModdingSection = InMenu->AddSection(NAME_Default, ModdingSectionLabel);
+				ModdingSection.InsertPosition = InsertPos;
+
+				ModdingSection.AddMenuEntry(
+					"UGCTemplatesAddItemFileMenuButton", 
+					AddItemLabel,
+					AddItemTooltip,
+					FSlateIcon(FModioUGCEditorStyle::GetStyleSetName(), "ModioUGCEditor.AddItemMenuIcon"),
+					FUIAction(FExecuteAction::CreateLambda([Plugin]() 
+						{
+							FModioUGCEditorModule& ModioUGCEditorModule = FModuleManager::LoadModuleChecked<FModioUGCEditorModule>("ModioUGCEditor");
+							ModioUGCEditorModule.CreateTemplateWindow(EUGCTemplateType::TT_Item, Plugin);
+					})));
+
+				ModdingSection.AddMenuEntry(
+					"UGCTemplatesExportTemplateFileMenuButton",
+					ExportTemplateLabel,
+					ExportTemplateTooltip,
+					FSlateIcon(FModioUGCEditorStyle::GetStyleSetName(), "ModioUGCEditor.ExportTemplateMenuIcon"),
+					FUIAction(FExecuteAction::CreateLambda([Plugin]() {
+						FModioUGCEditorModule& ModioUGCEditorModule =
+							FModuleManager::LoadModuleChecked<FModioUGCEditorModule>("ModioUGCEditor");
+						ModioUGCEditorModule.CreateExportWindow(Plugin);
+					})));
+				
+			}));
+	}
+);
+
+TSharedPtr<IPlugin> FModioUGCEditorModule::GetSelectedPlugin()
+{
+	IContentBrowserSingleton& ContentBrowser = FModuleManager::LoadModuleChecked<FContentBrowserModule>("ContentBrowser").Get();
+	TArray<FString> SelectedFolders;
+	ContentBrowser.GetSelectedPathViewFolders(SelectedFolders);
+
+	if (SelectedFolders.Num() != 1)
+	{
+		return nullptr;
+	}
+
+	FString Path = SelectedFolders[0];
+	return GetPluginFromPath(Path);
+}
+
+TSharedPtr<IPlugin> FModioUGCEditorModule::GetPluginFromPath(const FString& PluginPath)
+{
+	TArray<FString> PathPieces;
+	PluginPath.ParseIntoArray(PathPieces, TEXT("/"));
+	int32 PluginIndex = PathPieces.Find("Plugins");
+	if (PluginIndex == INDEX_NONE)
+	{
+		return nullptr;
+	}
+
+	return IPluginManager::Get().FindPlugin(PathPieces[PluginIndex + 1]);
+}
+
+bool FModioUGCEditorModule::CreateTemplateWindow(EUGCTemplateType Mode, TSharedPtr<IPlugin> Context) 
+{
+	bool bCreatedWindow = false;
 	if (!UGCTemplateWindow.IsValid())
 	{
-		UGCTemplateWindow = SNew(SWindow)
-					.Title(FText::FromString("UGC Templates"))
-					.SupportsMaximize(false)
-					.SupportsMinimize(false)
-					.HasCloseButton(true)
-					.ClientSize(FVector2D(1000.f, 720.f))
-					.SizingRule(ESizingRule::FixedSize)
-					.AutoCenter(EAutoCenter::PreferredWorkArea)
-					.ScreenPosition(FVector2D(0, 0))
-					.LayoutBorder(FMargin(3.f))[SAssignNew(TemplateWidget, SModioEditorUGCTemplateWidget)];
+		FText WindowTitle = (Mode == EUGCTemplateType::TT_Mod ? LOCTEXT("UGCTemplateWindowTitleMod",  "Add Item")
+															  : LOCTEXT("UGCTemplateWindowTitleItem", "Add Item"));
+		UGCTemplateWindow =
+			SNew(SWindow)
+				.Title(WindowTitle)
+				.SupportsMaximize(false)
+				.SupportsMinimize(false)
+				.HasCloseButton(true)
+				.ClientSize(FVector2D(1000.f, 720.f))
+				.SizingRule(ESizingRule::FixedSize)
+				.AutoCenter(EAutoCenter::PreferredWorkArea)
+				.ScreenPosition(FVector2D(0, 0))
+				.LayoutBorder(FMargin(3.f))
+				[
+					SAssignNew(TemplateWidget, SModioEditorUGCTemplateWidget)
+					.Mode(Mode)
+					.Context(Context)
+				];
+
 		UGCTemplateWindow->SetOnWindowClosed(
 			FOnWindowClosed::CreateLambda([this](const TSharedRef<SWindow>& WindowRef) {
-			TemplateWidget->TearDown();
-			TemplateWidget = nullptr;
-			UGCTemplateWindow = nullptr;
-		}));
+				TemplateWidget->TearDown();
+				TemplateWidget = nullptr;
+				UGCTemplateWindow = nullptr;
+			}));
 		FSlateApplication::Get().AddWindow(UGCTemplateWindow.ToSharedRef(), false);
+
+		bCreatedWindow = true;
 	}
 	UGCTemplateWindow->BringToFront(true);
 	UGCTemplateWindow->ShowWindow();
+
+	return bCreatedWindow;
+}
+
+bool FModioUGCEditorModule::CreateExportWindow(TSharedPtr<IPlugin> Context)
+{
+	bool bCreatedWindow = false;
+	if (!UGCTemplateWindow.IsValid())
+	{
+		UGCTemplateWindow = 
+			SNew(SWindow)
+			.Title(LOCTEXT("UGCTemplateExportWindowTitle", "Create Template From Mod"))
+			.SupportsMaximize(false)
+			.SupportsMinimize(false)
+			.HasCloseButton(true)
+			.ClientSize(FVector2D(800.f, 720.f))
+			.SizingRule(ESizingRule::FixedSize)
+			.AutoCenter(EAutoCenter::PreferredWorkArea)
+			.ScreenPosition(FVector2D(0, 0))
+			.LayoutBorder(FMargin(3.f))
+			[
+				SAssignNew(ExportWidget, SModioExportUGCTemplateWidget)
+				.Context(Context)
+			];
+
+		UGCTemplateWindow->SetOnWindowClosed(
+			FOnWindowClosed::CreateLambda([this](const TSharedRef<SWindow>& WindowRef) {
+				ExportWidget = nullptr;
+				UGCTemplateWindow = nullptr;
+			}));
+		FSlateApplication::Get().AddWindow(UGCTemplateWindow.ToSharedRef(), false);
+
+		bCreatedWindow = true;
+	}
+	UGCTemplateWindow->BringToFront(true);
+	UGCTemplateWindow->ShowWindow();
+
+	return bCreatedWindow;
+}
+
+void FModioUGCEditorModule::DismissUGCTemplateWindow() 
+{
+	if (UGCTemplateWindow == nullptr)
+	{
+		return;
+	}
+
+	UGCTemplateWindow->RequestDestroyWindow();
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -58,6 +58,8 @@ public class ModioUGCEditor : ModuleRules
                 "FileUtilities",
                 "EditorSubsystem",
                 "ToolMenus",
+                "SharedSettingsWidgets",
+                "ContentBrowser"
             }
         );
     }
