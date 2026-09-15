@@ -12,12 +12,31 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using static System.Formats.Asn1.AsnWriter;
 
 namespace ModioUGCGenerator.MutatorGenerator
 {
+    // UE 5.8 UHT input cache uses Type.GetType(metaType.FullName) which cannot resolve types in external plugin assemblies.
+    // Hook TypeResolve so UhtInputCacheReader can resolve UhtModScriptStruct during input cache deserialization.
+    internal static class ModioUgcGeneratorInitializer
+    {
+        [ModuleInitializer]
+        internal static void Initialize()
+        {
+            AppDomain.CurrentDomain.TypeResolve += (sender, args) =>
+            {
+                if (String.Equals(args.Name, typeof(UhtModScriptStruct).FullName, StringComparison.Ordinal))
+                {
+                    return typeof(UhtModScriptStruct).Assembly;
+                }
+                return null;
+            };
+        }
+    }
+
     //Custom Script Struct class to facilitate generating headers for structs with deferred properties
     public class UhtModScriptStruct : UhtScriptStruct
     {
@@ -42,21 +61,11 @@ namespace ModioUGCGenerator.MutatorGenerator
 #endif
 
 #if UE_5_5_OR_LATER
+        // Required by UHT input cache validation (UE 5.8 ValidateCacheableTypes)
         public UhtModScriptStruct(UhtInputCacheReader reader, UhtType outer)
             : base(reader, outer)
         {
             bNeedsResolution = reader.ReadBoolean();
-            if (bNeedsResolution && Session.Manifest != null)
-            {
-                foreach (UHTManifest.Module module in Session.Manifest.Modules)
-                {
-                    if (String.Equals(module.Name, "ModioUGC", StringComparison.OrdinalIgnoreCase))
-                    {
-                        ModModule = module;
-                        break;
-                    }
-                }
-            }
         }
 
         public override void Write(UhtInputCacheWriter writer)
@@ -645,7 +654,8 @@ namespace ModioUGCGenerator.MutatorGenerator
             topScope.TokenReader.Require(')');
 
             //Recreating the property type would cause a redefinition to create a new token to look up the param type defined by the DEFINE_MUTATOR
-            UhtToken T = new UhtToken(UhtTokenType.Identifier, 0, 0, 0, 0, "F" + Name.Value.ToString() + "_Params");
+            // Explicitly pass isInHeader: false so UHT input cache serializes the string instead of slicing header byte offsets
+            UhtToken T = new UhtToken(UhtTokenType.Identifier, 0, 0, 0, 0, "F" + Name.Value.ToString() + "_Params", false);
             List<UhtToken> Tokens = new List<UhtToken>() { T };
 
             //Add a parameter to the new param struct type to the parameter list of the function
