@@ -174,7 +174,7 @@ bool FUGCPackage::UnloadAssets()
 						}
 						return true;
 					},
-					true, RF_NoFlags, EInternalObjectFlags::None);
+					EGetObjectsFlags::IncludeNestedObjects, RF_NoFlags, EInternalObjectFlags::None);
 
 				UE_LOG(LogModioUGC, VeryVerbose, TEXT("Marked package '%s' and its objects for garbage collection"),
 					   *PackageName.ToString());

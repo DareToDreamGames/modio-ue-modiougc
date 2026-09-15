@@ -16,9 +16,9 @@
 void FModioUGCEditorCommands::RegisterCommands()
 {
 	UI_COMMAND(CreateUGCAction, "Create UGC", "Create a new UGC package", EUserInterfaceActionType::Button,
-			   FInputGesture());
+			   FInputChord());
 	UI_COMMAND(PackageUGCAction, "Package UGC", "Share and distribute your UGC", EUserInterfaceActionType::Button,
-			   FInputGesture());
+			   FInputChord());
 }
 
 TArray<TSharedPtr<FUICommandInfo>> FModioUGCEditorCommands::RegisterUGCCommands(
@@ -38,7 +38,7 @@ TArray<TSharedPtr<FUICommandInfo>> FModioUGCEditorCommands::RegisterUGCCommands(
 
 		FUICommandInfo::MakeCommandInfo(MutableThis->AsShared(), AvailableUGCActions[Index], FName(*CommandName),
 										FText::FromString(UGC->GetName()), FText::FromString(UGC->GetBaseDir()),
-										FSlateIcon(), EUserInterfaceActionType::Button, FInputGesture());
+										FSlateIcon(), EUserInterfaceActionType::Button, FInputChord());
 	}
 
 	return AvailableUGCActions;
