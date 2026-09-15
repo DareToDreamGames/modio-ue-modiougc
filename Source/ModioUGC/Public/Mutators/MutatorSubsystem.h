@@ -12,7 +12,7 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
-#include "InstancedStruct.h"
+#include "StructUtils/InstancedStruct.h"
 #include "MutatorUtils.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 

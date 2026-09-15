@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<Import Project="ModioUGCGenerator.ubtplugin.csproj.props" Condition="Exists('ModioUGCGenerator.ubtplugin.csproj.props')" />
 	<Import Project="$(EngineDir)\Source\Programs\Shared\UnrealEngine.csproj.props" />
@@ -9,7 +9,6 @@
 	
   <PropertyGroup>
     <AssemblyName>$(GeneratorName)</AssemblyName>
-    <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>Nullable</TreatWarningsAsErrors>
     <Configuration Condition=" '$(Configuration)' == '' ">Development</Configuration>
